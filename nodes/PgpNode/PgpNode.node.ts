@@ -194,14 +194,40 @@ export class PgpNode implements INodeType {
                 type: 'boolean',
                 default: false,
                 description: 'Whether the message contains an embedded signature',
-                displayOptions: {
-                    show: {
+                displayOptions:
+                {
+                    show:
+                    {
                         operation: ['decrypt-and-verify'],
                     },
                 },
             },
-        ],
-    };
+            {
+                displayName: 'Text Signature Format',
+                name: 'textSignatureFormat',
+                type: 'options',
+                default: 'detached',
+                options: [
+                {
+                    name: 'Detached',
+                    value: 'detached',
+                },
+                {
+                    name: 'Cleartext Signed Message',
+                    value: 'cleartext',
+                }, ],
+                description: 'Choose whether text signing uses a detached signature or a cleartext signed message',
+                displayOptions:
+                {
+                    show:
+                    {
+                        inputType: ['text'],
+                        operation: ['sign', 'verify'],
+                    },
+                },
+            }, 
+				],
+};
 
     async execute(this: IExecuteFunctions): Promise<INodeExecutionData[][]> {
         const items = this.getInputData();
