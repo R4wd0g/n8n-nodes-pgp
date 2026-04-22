@@ -184,3 +184,47 @@ export async function decryptBinaryWithVerification(
 
     return false;
 }
+
+export async function signCleartextText(
+  message: string,
+  privateKey: PrivateKey
+): Promise<string> {
+  const cleartext = await openpgp.createCleartextMessage({ text: message });
+
+  const signed = await openpgp.sign({
+    message: cleartext,
+    signingKeys: privateKey,
+    format: 'armored',
+  });
+
+  return signed as string;
+}
+
+export async function verifyCleartextText(
+  cleartextSignedMessage: string,
+  publicKey: Key
+): Promise<{ verified: boolean; data: string }> {
+  const parsed = await openpgp.readCleartextMessage({
+    cleartextMessage: cleartextSignedMessage,
+  });
+
+  const verification = await openpgp.verify({
+    message: parsed,
+    verificationKeys: publicKey,
+  });
+
+  const { verified } = verification.signatures[0];
+
+  try {
+    await verified;
+    return {
+      verified: true,
+      data: parsed.getText(),
+    };
+  } catch {
+    return {
+      verified: false,
+      data: parsed.getText(),
+    };
+  }
+}
