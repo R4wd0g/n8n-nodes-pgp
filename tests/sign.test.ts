@@ -1,5 +1,12 @@
 import { generateKeyPair } from './test-utils';
-import { signBinary, signText, verifyBinary, verifyText } from '../nodes/PgpNode/utils/operations';
+import {
+    signBinary,
+    signCleartextText,
+    signText,
+    verifyBinary,
+    verifyCleartextText,
+    verifyText,
+} from '../nodes/PgpNode/utils/operations';
 import fs from 'node:fs';
 import path from 'node:path';
 
@@ -29,6 +36,45 @@ test('signs and verifies text message with encrypted private key', async () => {
     const isVerified = await verifyText(message, signature, publicKey);
 
     expect(isVerified).toBeTruthy();
+});
+
+test('signs and verifies cleartext message', async () => {
+    const { privateKey, publicKey } = await generateKeyPair();
+    const message = 'Ola, tudo bem?\n- linha com hifen';
+
+    const signed = await signCleartextText(message, privateKey);
+
+    expect(signed).toContain('-----BEGIN PGP SIGNED MESSAGE-----');
+    expect(signed).toContain('-----BEGIN PGP SIGNATURE-----');
+
+    const result = await verifyCleartextText(signed, publicKey);
+
+    expect(result.verified).toBeTruthy();
+    expect(result.data).toEqual(message);
+});
+
+test('fails verification on tampered cleartext body and returns parsed data', async () => {
+    const { privateKey, publicKey } = await generateKeyPair();
+    const originalMessage = 'Line A\n- signed line';
+    const tamperedMessage = 'Line A\n- changed line';
+
+    const signed = await signCleartextText(originalMessage, privateKey);
+    const tamperedSigned = signed.replace('- signed line', '- changed line');
+
+    const result = await verifyCleartextText(tamperedSigned, publicKey);
+
+    expect(result.verified).toBeFalsy();
+    expect(result.data).toEqual(tamperedMessage);
+});
+
+test('preserves detached signature mode as default', async () => {
+    const { privateKey } = await generateKeyPair();
+    const message = 'This is a message to sign.';
+
+    const signature = await signText(message, privateKey);
+
+    expect(signature).toContain('-----BEGIN PGP SIGNATURE-----');
+    expect(signature).not.toContain('-----BEGIN PGP SIGNED MESSAGE-----');
 });
 
 test('verify fails with a different keypair', async () => {

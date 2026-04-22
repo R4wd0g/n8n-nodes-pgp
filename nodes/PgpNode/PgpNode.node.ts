@@ -134,6 +134,7 @@ export class PgpNode implements INodeType {
                 displayOptions: {
                     show: {
                         inputType: ['text'],
+                        operation: ['encrypt', 'decrypt', 'encrypt-and-sign', 'decrypt-and-verify', 'sign'],
                     },
                 },
             },
@@ -158,7 +159,7 @@ export class PgpNode implements INodeType {
                 displayOptions: {
                     show: {
                         inputType: ['text'],
-                        operation: ['verify', 'decrypt-and-verify'],
+                        operation: ['decrypt-and-verify'],
                         embeddedSignature: [false],
                     },
                 },
@@ -208,26 +209,93 @@ export class PgpNode implements INodeType {
                 type: 'options',
                 default: 'detached',
                 options: [
-                {
-                    name: 'Detached',
-                    value: 'detached',
-                },
-                {
-                    name: 'Cleartext Signed Message',
-                    value: 'cleartext',
-                }, ],
-                description: 'Choose whether text signing uses a detached signature or a cleartext signed message',
-                displayOptions:
-                {
-                    show:
                     {
+                        name: 'Detached',
+                        value: 'detached',
+                    },
+                    {
+                        name: 'Cleartext Signed Message',
+                        value: 'cleartext',
+                    },
+                ],
+                description: 'Choose whether text signing uses a detached signature or a cleartext signed message',
+                displayOptions: {
+                    show: {
                         inputType: ['text'],
-                        operation: ['sign', 'verify'],
+                        operation: ['sign'],
                     },
                 },
-            }, 
-				],
-};
+            },
+            {
+                displayName: 'Text Verification Format',
+                name: 'textVerificationFormat',
+                type: 'options',
+                default: 'detached',
+                options: [
+                    {
+                        name: 'Detached',
+                        value: 'detached',
+                    },
+                    {
+                        name: 'Cleartext Signed Message',
+                        value: 'cleartext',
+                    },
+                ],
+                description: 'Choose whether text verification uses a detached signature or a cleartext signed message',
+                displayOptions: {
+                    show: {
+                        inputType: ['text'],
+                        operation: ['verify'],
+                    },
+                },
+            },
+            {
+                displayName: 'Message',
+                name: 'verificationMessage',
+                type: 'string',
+                default: '',
+                placeholder: 'Message',
+                description: 'The message text to verify against a detached signature',
+                displayOptions: {
+                    show: {
+                        inputType: ['text'],
+                        operation: ['verify'],
+                        textVerificationFormat: ['detached'],
+                    },
+                },
+            },
+            {
+                displayName: 'Signature',
+                name: 'detachedSignature',
+                type: 'string',
+                default: '',
+                placeholder: '-----BEGIN PGP SIGNATURE-----',
+                description: 'Detached armored signature for text verification',
+                displayOptions: {
+                    show: {
+                        inputType: ['text'],
+                        operation: ['verify'],
+                        textVerificationFormat: ['detached'],
+                    },
+                },
+            },
+            {
+                displayName: 'Signed Message',
+                name: 'signedMessage',
+                type: 'string',
+                default: '',
+                placeholder: '-----BEGIN PGP SIGNED MESSAGE-----',
+                description: 'Full cleartext signed message including the signature block',
+                displayOptions: {
+                    show: {
+                        inputType: ['text'],
+                        operation: ['verify'],
+                        textVerificationFormat: ['cleartext'],
+                    },
+                },
+            },
+        ],
+    };
 
     async execute(this: IExecuteFunctions): Promise<INodeExecutionData[][]> {
         const items = this.getInputData();
@@ -242,6 +310,8 @@ export class PgpNode implements INodeType {
         let compressionAlgorithm: string;
         let embedSignature: boolean;
         let embeddedSignature: boolean;
+        let textSignatureFormat: string;
+        let textVerificationFormat: string;
 
         let credentials;
         let priKey: PrivateKey;
@@ -281,9 +351,36 @@ export class PgpNode implements INodeType {
                 compressionAlgorithm = 'uncompressed';
                 embedSignature = false;
                 embeddedSignature = false;
+                textSignatureFormat = 'detached';
+                textVerificationFormat = 'detached';
                 if (inputType === 'text') {
-                    message = this.getNodeParameter('message', itemIndex) as string;
                     binaryPropertyName = '';
+                    if (operation === 'sign') {
+                        message = this.getNodeParameter('message', itemIndex) as string;
+                        textSignatureFormat = this.getNodeParameter(
+                            'textSignatureFormat',
+                            itemIndex,
+                            'detached',
+                        ) as string;
+                    } else if (operation === 'verify') {
+                        const legacyMessage = this.getNodeParameter('message', itemIndex, '') as string;
+                        textVerificationFormat = this.getNodeParameter(
+                            'textVerificationFormat',
+                            itemIndex,
+                            'detached',
+                        ) as string;
+                        if (textVerificationFormat === 'cleartext') {
+                            message = this.getNodeParameter('signedMessage', itemIndex, legacyMessage) as string;
+                        } else {
+                            message = this.getNodeParameter(
+                                'verificationMessage',
+                                itemIndex,
+                                legacyMessage,
+                            ) as string;
+                        }
+                    } else {
+                        message = this.getNodeParameter('message', itemIndex) as string;
+                    }
                 } else {
                     message = '';
                     binaryPropertyName = this.getNodeParameter('binaryPropertyName', itemIndex) as string;
@@ -575,9 +672,15 @@ export class PgpNode implements INodeType {
                         break;
                     case 'sign':
                         if (inputType === 'text') {
-                            item.json = {
-                                signature: await signText(message, priKey),
-                            };
+                            if (textSignatureFormat === 'cleartext') {
+                                item.json = {
+                                    signedMessage: await signCleartextText(message, priKey),
+                                };
+                            } else {
+                                item.json = {
+                                    signature: await signText(message, priKey),
+                                };
+                            }
                         } else {
                             const binaryDataSign = BinaryUtils.base64ToUint8Array(item.binary[binaryPropertyName].data);
                             const signature = await signBinary(binaryDataSign, priKey);
@@ -596,12 +699,26 @@ export class PgpNode implements INodeType {
                         break;
                     case 'verify':
                         if (inputType === 'text') {
-                            signature = this.getNodeParameter('signature', itemIndex) as string;
-                            const isVerified = await verifyText(message, signature, pubKey);
+                            if (textVerificationFormat === 'cleartext') {
+                                const verificationResult = await verifyCleartextText(message, pubKey);
 
-                            item.json = {
-                                verified: isVerified,
-                            };
+                                item.json = {
+                                    verified: verificationResult.verified,
+                                    verifiedData: verificationResult.data,
+                                };
+                            } else {
+                                const legacySignature = this.getNodeParameter('signature', itemIndex, '') as string;
+                                signature = this.getNodeParameter(
+                                    'detachedSignature',
+                                    itemIndex,
+                                    legacySignature,
+                                ) as string;
+                                const isVerified = await verifyText(message, signature, pubKey);
+
+                                item.json = {
+                                    verified: isVerified,
+                                };
+                            }
                         } else {
                             binaryPropertyNameSignature = this.getNodeParameter(
                                 'binaryPropertyNameSignature',

@@ -27,6 +27,23 @@ Follow the [installation guide](https://docs.n8n.io/integrations/community-nodes
 - **Encrypt-And-Sign**: Encrypts and signs text or binary files in one step. Binary files can be compressed before encryption. Supports both detached signatures (default) and embedded signatures.
 - **Decrypt-And-Verify**: Decrypts and verifies text or binary files in one step. Compressed files can be decompressed after decryption. Supports both detached signatures (default) and embedded signatures.
 
+### Text Signature Formats (Sign/Verify)
+
+For **text input**, the node supports two signature formats in **Sign** and **Verify**:
+
+- **Detached** (default):
+	- Sign output: `signature`
+	- Verify input: `Message` + `Signature`
+	- Verify output: `verified`
+- **Cleartext Signed Message**:
+	- Sign output: `signedMessage` (full `-----BEGIN PGP SIGNED MESSAGE-----` block)
+	- Verify input: `Signed Message` (full cleartext signed block)
+	- Verify output: `verified` and `verifiedData`
+
+`verifiedData` is the parsed and verified canonical text. For cleartext signatures, prefer `verifiedData` as the trusted content instead of relying on the raw user input.
+
+Note: Cleartext signatures are for readable signed text and are intentionally separate from **Encrypt-And-Sign** (which produces `-----BEGIN PGP MESSAGE-----`).
+
 ### Embedded Signatures
 
 The **Encrypt-And-Sign** and **Decrypt-And-Verify** operations now support embedded signatures:
@@ -102,6 +119,9 @@ npx jest
 
 * Signs and verifies text message
 * Signs and verifies text message with encrypted private key
+* Signs and verifies cleartext message
+* Fails verification on tampered cleartext body and returns parsed data
+* Preserves detached signature mode as default
 * Verify fails with a different keypair
 * Signs binary data
 * Verify fails with a different keypair
