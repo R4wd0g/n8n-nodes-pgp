@@ -8,18 +8,20 @@ import {
 import * as openpgp from 'openpgp';
 import { PrivateKey, Key } from 'openpgp';
 import {
-    encryptText,
-    encryptBinary,
-    signText,
-    signBinary,
-    decryptText,
-    decryptBinary,
-    verifyText,
-    verifyBinary,
-    encryptTextWithSignature,
-    encryptBinaryWithSignature,
-    decryptTextWithVerification,
-    decryptBinaryWithVerification,
+  encryptText,
+  encryptBinary,
+  signText,
+  signBinary,
+  decryptText,
+  decryptBinary,
+  verifyText,
+  verifyBinary,
+  encryptTextWithSignature,
+  encryptBinaryWithSignature,
+  decryptTextWithVerification,
+  decryptBinaryWithVerification,
+  signCleartextText,
+  verifyCleartextText,
 } from './utils/operations';
 import { BinaryUtils } from './utils/BinaryUtils';
 import { DataCompressor } from './utils/DataCompressor';
